@@ -2,31 +2,61 @@ import numpy as np
 from scipy.stats import qmc
 from scipy.spatial import Delaunay
 
-class KalmanPoint:
-    def __init__(self, x, z, sigma=1.0, r=1.0):
+class KalmanFilter:
+    def __init__(self):
         """
-        x: prior mean
-        z: observed measurement
-        sigma: prior variance
-        r: estimated variance
+        mu: mu matrix (mean estimates)
+        sigma: covariance matrix
+        Q = noise in x (latent)
+        R: observation noise
         """
-        self.x = x
-        self.sigma = sigma
-        self.z = z
-        self.r = r
-        self.numOfUpdates = 0
+        self.mu = np.array([])
+        self.sigma = np.array([])
+        self.Q = 1.0
+        self.R = 0.04
     
-    def updateKalman(self, z):
+    def addPoint(self, z, index=None):
         """
-        Perform scalar Kalman filter update for a single point.
-
-        Returns: updated_mean, updated_variance
+        z: observed variable (noisy)
         """
-        K = self.sigma / (self.sigma + self.r)
-        postMean = self.x + K * (z - self.x)
-        postVariance = (1 - K) * self.sigma
+        if index is None:
+            # must be a new point
+            if self.mu.size() == 0:
+                # preventing possible bugs from appending to empty np array
+                self.mu = np.array([z])
+                self.sigma = np.array([1.0])
+            else:
+                self.mu = np.append(self.mu, z)
+                # expanding matrix by 1 row and col, setting prior variance to 1.0 as default
+                numPoints = self.sigma.shape[0]
+                newRow = np.zeros((1, numPoints))
+                self.sigma = np.block([
+                    [self.sigma, newRow.T],
+                    [newRow, np.array([1.0])]
+                ])
+        else:
+            H = np.zeros((1, self.mu.shape[0]))
+            H[0, index] = 1.0
 
-        return postMean, postVariance
+            # kalman gain (bayesian update term)
+            S = H @ self.Sigma @ H.T + self.R
+            K = self.Sigma @ H.T @ np.linalg.inv(S)
+
+            # posterior mean
+            y = z - (H @ self.mu)
+            self.mu = self.mu + (K @ y).flatten()
+
+            # posterior covariance
+            """
+            i simplify the below:
+            sigmapost = sigmaprior - KHsigmaprior
+            into the below:
+            sigmapost = (I - KH)sigmaprior
+            """
+            I = np.eye(len(self.mu))
+            self.Sigma = (I - K @ H) @ self.Sigma
+    def getState(self):
+        return self.mu, self.sigma
         
 def sampleInitialPoints(numOfPoints, bounds):
     """
