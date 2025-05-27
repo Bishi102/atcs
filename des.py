@@ -4,8 +4,9 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import differential_evolution
+from scipy.spatial import Delaunay
 
-# Your original CoffeeShopSimulator and related code here (same as before)
+
 class Event:
     def __init__(self, time, event_type):
         self.time = time
@@ -173,7 +174,10 @@ def run_optimization(seed):
     return optimized_profit
 
 
+
 if __name__ == "__main__":
+    np.random.seed(69)
+    
     optimized_profits = []
     runs = 20
 
@@ -188,3 +192,12 @@ if __name__ == "__main__":
 
     print(f"\nAverage optimized profit over {runs} runs: ${mean_profit:.2f}")
     print(f"Standard deviation of optimized profit over {runs} runs: ${std_profit:.2f}")
+
+    number_of_points = 10
+    initial_points = sample_initial_points(number_of_points, bounds)
+    triangulation = deluanay_triangulation(initial_points)
+
+    print("Initial sampled points:")
+    print(initial_points)
+    print("\nDelaunay simplices (indices of points forming each simplex):")
+    print(triangulation.simplices)
