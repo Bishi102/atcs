@@ -125,9 +125,8 @@ iteration_history = []
 best_so_far_history = []
 
 def objective_function(params):
-    coffee_price, num_baristas, wage_per_hour, shop_start_time, shop_open_hours = params
+    coffee_price, num_baristas = params
     num_baristas = int(round(num_baristas))
-    shop_open_hours = int(round(shop_open_hours))
 
     # Run simulation 365 times (simulate a year) and average profit
     profits = []
@@ -135,9 +134,6 @@ def objective_function(params):
         sim = CoffeeShopSimulator(
             coffee_price=coffee_price,
             num_baristas=num_baristas,
-            wage_per_hour=wage_per_hour,
-            shop_start_time=shop_start_time,
-            shop_open_hours=shop_open_hours,
             max_queue_length=5  # fixed max queue length
         )
         result = sim.run()
