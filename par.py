@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.stats import qmc
 from scipy.spatial import Delaunay
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from des import objective_function as obj
 
 class KalmanFilter:
@@ -89,66 +91,99 @@ def interpolate(params, tri, mu, Sigma):
     return mean, variance
 
 def main(obj, bounds, nInit, nIter, nCand, beta):
-      """
-      
-      """
-      # intial parameter sampling
-      X = sampleInitialPoints(nInit, bounds)
-      Y = np.array([obj(x) for x in X])
-      print("Initial X:", X)
-      print("Initial Y:", Y)
-      # initialise kalman filter and add points
-      kf = KalmanFilter()
-      for i in range(nInit):
-          kf.addPoint(Y[i], X[i])
-      
-      # triangulate evaluated points (params, obj(params))
-      points = np.hstack([X, Y.reshape(-1, 1)])
-      tri = Delaunay(points)
+    """
+    Kalman-filter-guided optimization with Delaunay-based interpolation.
+    Shows 2D plot only if parameter dimension is 2.
+    """
+    dim = bounds.shape[0]
 
-      for iteration in range(nIter):
-          # sampling of candidates
-          candidates = sampleInitialPoints(nCand, bounds)
-          acquisition = []
-          for c in candidates:
-              try:
-                  mu, var = interpolate(c, tri, kf.mu, kf.Sigma)
-                  print(mu)
-                  print(var)
-                  ucb = mu + beta * np.sqrt(var)
-                  print(ucb)
-                  acquisition.append((ucb, c))
-              except ValueError:
-                  print(f"Candidate {c} is outside convex hull")
-                  continue
-          if not acquisition:
-              print("No valid candidate points found inside the convex hull.")
-              break
-          # get best candidate based on acquisition function
-          acquisition.sort(reverse=True, key=lambda x: x[0])
-          bestCandidate = acquisition[0][1]
+    # initial parameter sampling
+    X = sampleInitialPoints(nInit, bounds)
+    Y = np.array([obj(x) for x in X])
+    print("Initial X:", X)
+    print("Initial Y:", Y)
 
-          # evaluate at best candidate params
-          newY = obj(bestCandidate)
+    # initialise Kalman filter and add points
+    kf = KalmanFilter()
+    for i in range(nInit):
+        kf.addPoint(Y[i], X[i])
 
-          # update kalman filter and add new point to known points and update triangulation
-          kf.addPoint(newY, bestCandidate)
-          X = np.vstack([X, bestCandidate])
-          Y = np.append(Y, newY)
-          points = np.hstack([X, Y.reshape(-1, 1)])
-          tri = Delaunay(points)
+    # initial Delaunay triangulation
+    tri = Delaunay(X, furthest_site=False)
 
-          print("iteration " + iteration + " complete")
-          bestIndex = np.argmax(Y)
-      return X[bestIndex], Y[bestIndex]
+    for iteration in range(nIter):
+        candidates = sampleInitialPoints(nCand, bounds)
+        acquisition = []
+        for c in candidates:
+            try:
+                mu, var = interpolate(c, tri, kf.mu, kf.Sigma)
+                ucb = mu + beta * np.sqrt(var)
+                acquisition.append((ucb, c))
+            except ValueError:
+                print(f"Candidate {c} is outside convex hull")
+                continue
+        if not acquisition:
+            print("No valid candidate points found inside the convex hull.")
+            break
+
+        # pick best candidate
+        acquisition.sort(reverse=True, key=lambda x: x[0])
+        bestCandidate = acquisition[0][1]
+
+        # evaluate and update
+        newY = obj(bestCandidate)
+        kf.addPoint(newY, bestCandidate)
+        X = np.vstack([X, bestCandidate])
+        Y = np.append(Y, newY)
+        tri = Delaunay(X)
+
+        print("Iteration", iteration, "complete")
+
+    # best found
+    bestIndex = np.argmax(Y)
+    bestParams = X[bestIndex]
+    bestProfit = Y[bestIndex]
+
+    # --- Plot only if input is 2D ---
+    if dim == 2:
+        from mpl_toolkits.mplot3d import Axes3D
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Scatter all evaluated points
+        ax.scatter(X[:, 0], X[:, 1], Y, c=Y, cmap='viridis', s=40, label="Evaluated points")
+        
+        # Highlight best point
+        ax.scatter(bestParams[0], bestParams[1], bestProfit, color='red', s=100, edgecolor='black', label="Best point")
+
+            # Plot Delaunay triangulation as 3D surface
+        if tri.points.shape[1] == 2:
+            for simplex in tri.simplices:
+                verts = [(X[i][0], X[i][1], Y[i]) for i in simplex]
+                tri_poly = Poly3DCollection([verts], alpha=0.3)
+                tri_poly.set_color('lightblue')
+                tri_poly.set_edgecolor('gray')
+                ax.add_collection3d(tri_poly)
+
+
+        ax.set_xlabel("Coffee Price")
+        ax.set_ylabel("Number of Baristas")
+        ax.set_zlabel("Profit")
+        ax.set_title("3D Optimization Surface (params vs f(params))")
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+
+
+    return bestParams, bestProfit
+
 
 if __name__ == "__main__":
     bounds = [
-    (2.5, 8.0),    # coffee_price
-    (1, 5)        # num_baristas
-]
+        (2.5, 8.0),    # coffee_price
+        (1, 5)         # num_baristas
+    ]
     bounds = np.array(bounds)
     params, profit = main(obj, bounds, 10, 10, 100, 2)
     print(params)
     print(profit)
-          
