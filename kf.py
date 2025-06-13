@@ -1,6 +1,5 @@
 """
 Kalman Filter:
-
 """
 
 import numpy as np
@@ -71,5 +70,6 @@ class KalmanFilter:
         For returning best profit and parameters
         """
         bestIndex = np.argmax(self.mu)
+
         return self.points[bestIndex], self.mu[bestIndex]
     

@@ -4,17 +4,18 @@ Discrete Event Simulator
 - Simualtes the average daily profit of a coffee shop
 
 Parameters are:
-- coffeePrice: price of a cup of coffee
-    - 
 - numBaristas: number of baristas
+- coffeePrice: price of a cup of coffee
 - wagePerHour: hourly wage of an employee
 - shopStartTime: 24h time of shop opening time
 - shopOpenHours: 24h time of shop open hours
+- maxQueueLength: max length of queue
 """
 
 import heapq
 import random
 import math
+random.seed(69)
 
 class Event:
     def __init__(self, time, eventType):

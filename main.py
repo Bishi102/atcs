@@ -1,7 +1,7 @@
 """
-
+Main optimisation excecutable:
 """
-
+from plots import Plots
 from des import CoffeeShopSimulator
 from optimisation import Optimisation
 
@@ -33,10 +33,7 @@ if __name__ == "__main__":
 
     bounds = np.array([
         [1, 4], # num of baristas
-        [1.0, 7.0], # coffee price
-        [22.0, 36.0], # wage
-        [6.0, 12.0], # open time
-
+        [1.0, 7.0] # coffee price
     ])
 
     optimiser = Optimisation(
@@ -54,3 +51,6 @@ if __name__ == "__main__":
     bestParams, bestProfit = optimiser.optimise()
     print("Best Parameters:", bestParams)
     print("Estimated Profit:", bestProfit)
+    plotting = Plots()
+    plotting.plot3DSurface(optimiser.kf, optimiser.tri)
+    

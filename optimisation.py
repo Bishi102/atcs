@@ -1,6 +1,5 @@
 """
 Optimisation Algorithm:
-
 """
 
 from plots import Plots
@@ -11,6 +10,7 @@ import numpy as np
 from itertools import product
 from scipy.stats import qmc
 from scipy.spatial import Delaunay
+from numpy.random import default_rng
 
 class Optimisation:
 
@@ -33,7 +33,15 @@ class Optimisation:
         self.epsilonEnd = epsilonEnd
         self.epsilonDecay = epsilonDecay
 
+        self.history = []
+
         self.kf = Kf()
+        self.tri = self.initialTri()
+
+        # uncomment to get Figure 2 in figure2.py
+        # plot = Plots()
+        # plot.plot2DTri(self.tri, self.kf.points)
+        
 
     def initialTri(self):
         """
@@ -56,6 +64,7 @@ class Optimisation:
         """
         self.kf.addPoint(z, x)
         tri.add_points(np.array([x]), restart=False)
+        self.history.append(np.max(self.kf.mu))
 
 
     def samplePoints(self, numOfPoints):
@@ -63,12 +72,12 @@ class Optimisation:
         uses latin hypercube sampling to get initial points for evaluation and triangulation
         """
         dimension = self.bounds.shape[0]
-        sampler = qmc.LatinHypercube(d=dimension)
+        sampler = qmc.LatinHypercube(d=dimension, seed=69)
         samples = sampler.random(n=numOfPoints)
         scaledSamples = qmc.scale(samples, self.bounds[:, 0], self.bounds[:, 1])
         return scaledSamples
 
-    def interpolate(self, params, tri, mu, Sigma):
+    def interpolate(self, params, tri, mu, Sigma, alpha=0.5):
         """
         Uses barycentric coordinates inside Delaunay simplexes to interpolate mean
         Distance-based function used to estimate variance
@@ -89,8 +98,11 @@ class Optimisation:
         baryCoords = np.append(baryCoords, 1 - np.sum(baryCoords))
 
         mean = np.dot(baryCoords, mu[vertices])
+
         subSigma = Sigma[np.ix_(vertices, vertices)]
-        variance = baryCoords @ subSigma @ baryCoords.T
+        baseVariance = baryCoords @ subSigma @ baryCoords.T
+        uncertainty_adjustment = alpha * (1 - np.max(baryCoords))
+        variance = baseVariance + uncertainty_adjustment
 
         return mean, variance
     
@@ -101,14 +113,13 @@ class Optimisation:
         obj: objective function
         Shows 2D plot only if parameter dimension is 2.
         """
-        # initial triangulation of corners and formation of kalman filter
-        tri = self.initialTri()
-        
         # initial sampling and evaluation inside search space
         samples = self.samplePoints(self.nInit)
         for sample in samples:
-            self.addPoint(tri, sample, self.obj(sample))
-
+            self.addPoint(self.tri, sample, self.obj(sample))
+        # uncomment to get Figure 3 in figure3.py
+        # plot = Plots()
+        # plot.plot2DTri(self.tri, self.kf.points)
         # main optimisation loop (budget)
         for iteration in range(self.nIter):
             # epsilon greedy for exploration/exploitation of known/unknown point evaluations
@@ -118,14 +129,11 @@ class Optimisation:
             acquisition = []
             for candidate in candidates:
                 try:
-                    mu, var = self.interpolate(candidate, tri, self.kf.mu, self.kf.Sigma)
+                    mu, var = self.interpolate(candidate, self.tri, self.kf.mu, self.kf.Sigma)
                     ucb = mu + self.beta * np.sqrt(var)
                     acquisition.append((ucb, candidate))
-                    #print(f"Candidate {candidate} is inside convex hull")
                 except ValueError:
-                    #print(f"Candidate {candidate} is outside convex hull")
                     continue
-            print(len(acquisition))
             if not acquisition:
                 print("No valid candidate points found inside the convex hull.")
                 break
@@ -134,18 +142,12 @@ class Optimisation:
             
             if np.random.rand() < epsilon:
                 # explore: evaluate best candidate
-                self.addPoint(tri, bestCandidate, self.obj(bestCandidate))
+                self.addPoint(self.tri, bestCandidate, self.obj(bestCandidate))
             else:
-                # exploit: re-evaluate closest known point
-                simplexIndex = tri.find_simplex(bestCandidate)
-                if simplexIndex == -1:
-                    raise ValueError("Point is outside the convex hull of known points.")
-                simplexVertices = tri.simplices[simplexIndex]
-                vertexPoints = np.array([self.kf.points[i] for i in simplexVertices])
-
-                distances = np.linalg.norm(vertexPoints - bestCandidate, axis=1)
-                closestIndex = simplexVertices[np.argmin(distances)]
-                closestPoint = self.kf.points[closestIndex]
-                self.kf.update(self.obj(closestPoint), closestIndex)
+                # exploit: evaluate known point with highest mean so far
+                bestMeanIndex = np.argmax(self.kf.mu)
+                bestMeanPoint = self.kf.points[bestMeanIndex]
+                self.kf.update(self.obj(bestMeanPoint), bestMeanIndex)
+            self.history.append(np.max(self.kf.mu))
         # optimised resutl and parameters
         return self.kf.getBest()
